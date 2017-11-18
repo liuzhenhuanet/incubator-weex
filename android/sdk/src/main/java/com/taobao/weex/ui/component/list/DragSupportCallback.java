@@ -57,6 +57,9 @@ class DragSupportCallback extends ItemTouchHelper.Callback {
 
     @Override
     public int getMovementFlags(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
+        if (mDragHelper.isDragExcluded(viewHolder)) {
+            return makeMovementFlags(0, 0);
+        }
         if (recyclerView.getLayoutManager() instanceof GridLayoutManager || recyclerView.getLayoutManager() instanceof StaggeredGridLayoutManager) {
             int dragFlags = ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT;
             int swipeFlags = 0;
@@ -78,7 +81,7 @@ class DragSupportCallback extends ItemTouchHelper.Callback {
             return false;
         }
 
-        if (mDragHelper.isDragExcluded(viewHolder)) {
+        if (mDragHelper.isDragExcluded(viewHolder) || mDragHelper.isDragExcluded(target)) {
             return false;
         }
 

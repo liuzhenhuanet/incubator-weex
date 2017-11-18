@@ -121,7 +121,7 @@ class DefaultDragHelper implements DragHelper {
 
     @Override
     public void startDrag(@NonNull RecyclerView.ViewHolder viewHolder) {
-        if (isDraggable) {
+        if (isDraggable && !isDragExcluded(viewHolder)) {
             mItemTouchHelper.startDrag(viewHolder);
         }
     }

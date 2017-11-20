@@ -54,6 +54,7 @@ class DefaultDragHelper implements DragHelper {
 
     private static final String EVENT_START_DRAG = "dragstart";
     private static final String EVENT_END_DRAG = "dragend";
+    private static final String EVENT_MOVE_DRAG = "dragmove";
 
     private static final String TAG_EXCLUDED = "drag_excluded";
 
@@ -107,6 +108,7 @@ class DefaultDragHelper implements DragHelper {
             Collections.swap(mDataSource, fromPos, toPos);
             adapter.notifyItemMoved(fromPos, toPos);
         }
+        mEventTrigger.triggerEvent(EVENT_MOVE_DRAG, buildEvent(null, fromPos, toPos));
     }
 
     @Override

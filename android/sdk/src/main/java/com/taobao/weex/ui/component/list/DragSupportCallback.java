@@ -93,7 +93,6 @@ class DragSupportCallback extends ItemTouchHelper.Callback {
                 dragFrom = fromPos;
             }
             dragTo = toPos;
-
             mDragHelper.onDragging(fromPos, toPos);
             return true;
         } catch (Exception e) {

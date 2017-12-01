@@ -124,6 +124,7 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
 
   public long mRenderStartNanos;
   public int mExecJSTraceId = WXTracing.nextId();
+  private boolean mInvokeViewAppearOnResume = true; // 如果是内部WXSDKInstance，则应该设置为false，不然viewappear以及viewdisappear会调用两次
 
   /**
    * Render strategy.
@@ -275,6 +276,7 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
 
   public final WXSDKInstance createNestedInstance(NestedContainer container){
     WXSDKInstance sdkInstance = newNestedInstance();
+    sdkInstance.mInvokeViewAppearOnResume = false;
     if(mNestedInstanceInterceptor != null){
       mNestedInstanceInterceptor.onCreateNestInstance(sdkInstance,container);
     }
@@ -827,7 +829,9 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
 
   @Override
   public void onActivityPause() {
-    onViewDisappear();
+    if (mInvokeViewAppearOnResume) {
+      onViewDisappear();
+    }
     if(!isCommit){
       Set<String> componentTypes= WXComponentFactory.getComponentTypesByInstanceId(getInstanceId());
       if(componentTypes!=null && componentTypes.contains(WXBasicComponentType.SCROLLER)){
@@ -880,7 +884,9 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
       mCurrentGround = false;
     }
 
-    onViewAppear();
+    if (mInvokeViewAppearOnResume) {
+      onViewAppear();
+    }
 
     setViewPortWidth(mInstanceViewPortWidth);
   }

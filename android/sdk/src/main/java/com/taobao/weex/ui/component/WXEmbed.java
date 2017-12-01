@@ -322,9 +322,10 @@ public class WXEmbed extends WXDiv implements WXSDKInstance.OnInstanceVisibleLis
   public void onAppear() {
     //appear event from root instance will not trigger visibility change
     if(mIsVisible && mNestedInstance != null){
-      WXComponent comp = mNestedInstance.getRootComponent();
-      if(comp != null)
-        comp.fireEvent(Constants.Event.VIEWAPPEAR);
+      mNestedInstance.onViewAppear();
+//      WXComponent comp = mNestedInstance.getRootComponent();
+//      if(comp != null)
+//        comp.fireEvent(Constants.Event.VIEWAPPEAR);
     }
   }
 
@@ -332,9 +333,10 @@ public class WXEmbed extends WXDiv implements WXSDKInstance.OnInstanceVisibleLis
   public void onDisappear() {
     //appear event from root instance will not trigger visibility change
     if(mIsVisible && mNestedInstance != null){
-      WXComponent comp = mNestedInstance.getRootComponent();
-      if(comp != null)
-        comp.fireEvent(Constants.Event.VIEWDISAPPEAR);
+      mNestedInstance.onViewDisappear();
+//      WXComponent comp = mNestedInstance.getRootComponent();
+//      if(comp != null)
+//        comp.fireEvent(Constants.Event.VIEWDISAPPEAR);
     }
   }
 

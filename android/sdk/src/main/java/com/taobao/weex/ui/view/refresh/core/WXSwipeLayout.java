@@ -366,7 +366,9 @@ public class WXSwipeLayout extends FrameLayout implements NestedScrollingParent,
      * @param h Height of refresh view or loading view
      */
     private void moveTargetView(float h) {
-        mTargetView.setTranslationY(h);
+        if (mTargetView != null) {
+            mTargetView.setTranslationY(h);
+        }
     }
 
     /**

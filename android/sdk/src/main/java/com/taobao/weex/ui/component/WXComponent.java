@@ -39,6 +39,7 @@ import android.support.annotation.RestrictTo;
 import android.support.annotation.RestrictTo.Scope;
 import android.support.v4.view.ViewCompat;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
@@ -762,19 +763,20 @@ public abstract class  WXComponent<T extends View> implements IWXObject, IWXActi
         final Float radius = WXUtils.getFloat(param,null);
         final String finalKey = key;
         if (radius != null) {
-          if (this instanceof WXDiv && mHost != null) {
-            /* Hacked by moxun
-               Set border radius on ViewGroup will cause the Overlay to be cut and don't know why
-               Delay setting border radius can avoid the problem, and don't know why too, dog science…… */
-            mHost.postDelayed(new Runnable() {
-              @Override
-              public void run() {
-                setBorderRadius(finalKey, radius);
-              }
-            }, 64);
-          } else {
-            setBorderRadius(finalKey, radius);
-          }
+          setBorderRadius(finalKey, radius);
+//          if (this instanceof WXDiv && mHost != null) {
+//            /* Hacked by moxun
+//               Set border radius on ViewGroup will cause the Overlay to be cut and don't know why
+//               Delay setting border radius can avoid the problem, and don't know why too, dog science…… */
+//            mHost.postDelayed(new Runnable() {
+//              @Override
+//              public void run() {
+//                setBorderRadius(finalKey, radius);
+//              }
+//            }, 64);
+//          } else {
+//            setBorderRadius(finalKey, radius);
+//          }
         }
         return true;
       case Constants.Name.BORDER_WIDTH:

@@ -87,6 +87,7 @@ public class BoxShadowUtil {
 
     WXLogUtils.d(TAG, "Set box-shadow: " + options.toString());
 
+    // todo 会导致View先绘制出来，然后才看到绘制的“阴影”
     target.post(new Runnable() {
       @Override
       public void run() {

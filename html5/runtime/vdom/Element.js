@@ -299,6 +299,24 @@ export default class Element extends Node {
   }
 
   /**
+   * Set batched attributes.
+   * @param {object} batchedAttrs
+   * @param {boolean} silent
+   */
+  setAttrs (batchedAttrs, silent) {
+    // TODO: validate batched attributes
+    Object.assign(this.attr, batchedAttrs)
+    const taskCenter = getTaskCenter(this.docId)
+    if (!silent && taskCenter) {
+      taskCenter.send(
+        'dom',
+        { action: 'updateAttrs' },
+        [this.ref, batchedAttrs]
+      )
+    }
+  }
+
+  /**
    * Set a style property, and decide whether the task should be send to native.
    * @param {string} key
    * @param {string | number} value
@@ -317,6 +335,24 @@ export default class Element extends Node {
         'dom',
         { action: 'updateStyle' },
         [this.ref, result]
+      )
+    }
+  }
+
+  /**
+   * Set batched style properties.
+   * @param {object} batchedStyles
+   * @param {boolean} silent
+   */
+  setStyles (batchedStyles, silent) {
+    // TODO: validate batched styles
+    Object.assign(this.style, batchedStyles)
+    const taskCenter = getTaskCenter(this.docId)
+    if (!silent && taskCenter) {
+      taskCenter.send(
+        'dom',
+        { action: 'updateStyle' },
+        [this.ref, batchedStyles]
       )
     }
   }
@@ -409,7 +445,7 @@ export default class Element extends Node {
 
     if (!isStopPropagation
       && isBubble
-      && BUBBLE_EVENTS.includes(type)
+      && (BUBBLE_EVENTS.indexOf(type) !== -1)
       && this.parentNode
       && this.parentNode.fireEvent) {
       event.currentTarget = this.parentNode

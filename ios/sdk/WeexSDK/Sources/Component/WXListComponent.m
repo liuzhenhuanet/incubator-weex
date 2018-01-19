@@ -58,6 +58,12 @@
     if (fabs(contentOffset.y) < 0.5) {
         contentOffset.y = 0;
     }
+    if (isnan(contentOffset.x)) {
+        contentOffset.x = 0;
+    }
+    if(isnan(contentOffset.y)) {
+        contentOffset.y = 0;
+    }
     
     [super setContentOffset:contentOffset];
 }
@@ -155,9 +161,10 @@
     _tableView.delegate = self;
     _tableView.dataSource = self;
     _tableView.userInteractionEnabled = YES;
-#ifdef __IPHONE_11_0
-    _tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
-#endif
+    
+    _tableView.estimatedRowHeight = 0;
+    _tableView.estimatedSectionFooterHeight = 0;
+    _tableView.estimatedSectionHeaderHeight = 0;
 }
 
 - (void)viewWillUnload
@@ -546,10 +553,16 @@
             [self removeCellForIndexPath:fromIndexPath withSections:_completedSections];
             [self insertCell:cell forIndexPath:toIndexPath withSections:_completedSections];
             [UIView performWithoutAnimation:^{
-                [_tableView beginUpdates];
-                [_tableView moveRowAtIndexPath:fromIndexPath toIndexPath:toIndexPath];
-                [self handleAppear];
-                [_tableView endUpdates];
+                @try {
+                    [_tableView beginUpdates];
+                    [_tableView moveRowAtIndexPath:fromIndexPath toIndexPath:toIndexPath];
+                    [self handleAppear];
+                    [_tableView endUpdates];
+                }@catch(NSException * exception){
+                    WXLogDebug(@"move cell exception: %@", [exception description]);
+                }@finally {
+                    // do nothing
+                }
             }];
         }
     }];

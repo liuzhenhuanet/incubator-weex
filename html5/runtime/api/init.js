@@ -18,8 +18,12 @@
  */
 
 import { init as initTaskHandler } from '../bridge/TaskCenter'
-import { registerElement } from '../vdom/WeexElement'
+import { receiveTasks } from '../bridge/receiver'
+import { registerModules } from './module'
+import { registerComponents } from './component'
 import { services, register, unregister } from './service'
+import { createTracker } from '../utils'
+import WeexInstance from './WeexInstance'
 
 let frameworks
 let runtimeConfig
@@ -95,57 +99,77 @@ function createInstance (id, code, config, data) {
   config = JSON.parse(JSON.stringify(config || {}))
   config.env = JSON.parse(JSON.stringify(global.WXEnvironment || {}))
 
-  const context = {
-    config,
+  const weex = new WeexInstance(id, config)
+  const tracker = createTracker(weex)
+  Object.freeze(weex)
+
+  const runtimeEnv = {
+    weex,
+    config, // TODO: deprecated
     created: Date.now(),
     framework: bundleType
   }
-  context.services = createServices(id, context, runtimeConfig)
-  instanceMap[id] = context
+  runtimeEnv.services = createServices(id, runtimeEnv, runtimeConfig)
+  instanceMap[id] = runtimeEnv
 
-  if (process.env.NODE_ENV === 'development') {
-    console.debug(`[JS Framework] create an ${bundleType} instance`)
-  }
+  const runtimeContext = Object.create(null)
+  Object.assign(runtimeContext, runtimeEnv.services, { weex })
 
-  const fm = frameworks[bundleType]
-  if (!fm) {
+  const framework = runtimeConfig.frameworks[bundleType]
+  if (!framework) {
     return new Error(`invalid bundle type "${bundleType}".`)
   }
+  if (bundleType === 'Weex') {
+    console.error(`[JS Framework] COMPATIBILITY WARNING: `
+      + `Weex DSL 1.0 (.we) framework is no longer supported! `
+      + `It will be removed in the next version of WeexSDK, `
+      + `your page would be crash if you still using the ".we" framework. `
+      + `Please upgrade it to Vue.js or Rax.`)
+  }
 
-  return fm.createInstance(id, code, config, data, context)
+  tracker('bundleType', bundleType)
+
+  // run create instance
+  if (typeof framework.prepareInstanceContext === 'function') {
+    const instanceContext = framework.prepareInstanceContext(runtimeContext)
+    return runInContext(code, instanceContext)
+  }
+  return framework.createInstance(id, code, config, data, runtimeEnv)
+}
+
+/**
+ * Run js code in a specific context.
+ * @param {string} code
+ * @param {object} context
+ */
+function runInContext (code, context) {
+  const keys = []
+  const args = []
+  for (const key in context) {
+    keys.push(key)
+    args.push(context[key])
+  }
+
+  const bundle = `
+    (function (global) {
+      "use strict";
+      ${code}
+    })(Object.create(this))
+  `
+
+  return (new Function(...keys, bundle))(...args)
 }
 
 const methods = {
   createInstance,
   registerService: register,
-  unregisterService: unregister
-}
-
-/**
- * Register methods which init each frameworks.
- * @param {string} methodName
- */
-function genInit (methodName) {
-  methods[methodName] = function (...args) {
-    if (methodName === 'registerComponents') {
-      checkComponentMethods(args[0])
+  unregisterService: unregister,
+  callJS (id, tasks) {
+    const framework = frameworks[getFrameworkType(id)]
+    if (framework && typeof framework.receiveTasks === 'function') {
+      return framework.receiveTasks(id, tasks)
     }
-    for (const name in frameworks) {
-      const framework = frameworks[name]
-      if (framework && framework[methodName]) {
-        framework[methodName](...args)
-      }
-    }
-  }
-}
-
-function checkComponentMethods (components) {
-  if (Array.isArray(components)) {
-    components.forEach((name) => {
-      if (name && name.type && name.methods) {
-        registerElement(name.type, name.methods)
-      }
-    })
+    return receiveTasks(id, tasks)
   }
 }
 
@@ -187,19 +211,23 @@ function genInstance (methodName) {
 }
 
 /**
- * Adapt some legacy method(s) which will be called for each instance. These
- * methods should be deprecated and removed later.
+ * Register methods which init each frameworks.
  * @param {string} methodName
- * @param {string} nativeMethodName
+ * @param {function} sharedMethod
  */
-function adaptInstance (methodName, nativeMethodName) {
-  methods[nativeMethodName] = function (...args) {
-    const id = args[0]
-    const type = getFrameworkType(id)
-    if (type && frameworks[type]) {
-      return frameworks[type][methodName](...args)
+function adaptMethod (methodName, sharedMethod) {
+  methods[methodName] = function (...args) {
+    if (typeof sharedMethod === 'function') {
+      sharedMethod(...args)
     }
-    return new Error(`invalid instance id "${id}"`)
+
+    // TODO: deprecated
+    for (const name in runtimeConfig.frameworks) {
+      const framework = runtimeConfig.frameworks[name]
+      if (framework && framework[methodName]) {
+        framework[methodName](...args)
+      }
+    }
   }
 }
 
@@ -216,12 +244,11 @@ export default function init (config) {
     framework.init(config)
   }
 
-  // @todo: The method `registerMethods` will be re-designed or removed later.
-  ; ['registerComponents', 'registerModules', 'registerMethods'].forEach(genInit)
+  adaptMethod('registerComponents', registerComponents)
+  adaptMethod('registerModules', registerModules)
+  adaptMethod('registerMethods')
 
-  ; ['destroyInstance', 'refreshInstance', 'receiveTasks', 'getRoot'].forEach(genInstance)
-
-  adaptInstance('receiveTasks', 'callJS')
+  ; ['destroyInstance', 'refreshInstance', 'getRoot'].forEach(genInstance)
 
   return methods
 }

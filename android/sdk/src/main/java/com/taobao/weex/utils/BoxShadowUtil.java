@@ -20,6 +20,7 @@ package com.taobao.weex.utils;
 
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
@@ -35,10 +36,15 @@ import android.graphics.Shader;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.support.annotation.IntRange;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+
+import com.taobao.weex.WXEnvironment;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,8 +60,23 @@ import java.util.List;
 
 public class BoxShadowUtil {
   private static final String TAG = "BoxShadowUtil";
+  private static boolean sBoxShadowEnabled = true;
 
-  public static void setBoxShadow(final View target, String style, float[] radii, int viewPort) {
+  public static void setBoxShadowEnabled(boolean enabled) {
+    sBoxShadowEnabled = enabled;
+    WXLogUtils.w(TAG, "Switch box-shadow status: " + enabled);
+  }
+
+  public static boolean isBoxShadowEnabled() {
+    return sBoxShadowEnabled;
+  }
+
+  public static void setBoxShadow(final View target, String style, float[] radii, int viewPort, final float quality) {
+    if (!sBoxShadowEnabled) {
+      WXLogUtils.w(TAG, "box-shadow was disabled by config");
+      return;
+    }
+
     final BoxShadowOptions options = parseBoxShadow(style, viewPort);
     if (options == null) {
       WXLogUtils.w(TAG, "Failed to parse box-shadow: " + style);
@@ -92,9 +113,9 @@ public class BoxShadowUtil {
       @Override
       public void run() {
         if (options.isInset) {
-          setInsetBoxShadow(target, options);
+          setInsetBoxShadow(target, options, quality);
         } else {
-          setNormalBoxShadow(target, options);
+          setNormalBoxShadow(target, options, quality);
         }
       }
     });
@@ -104,60 +125,47 @@ public class BoxShadowUtil {
                                            float[] radii, float shadowRadius,
                                            float shadowSpread,
                                            float dx, float dy, int shadowColor) {
-
-    if (shadowRadius == 0) {
-      // 0 can not draw shadow layer
-      shadowRadius = 0.01f;
-    }
-
     int canvasWidth = viewWidth + 2 * (int) (shadowRadius + shadowSpread + Math.abs(dx));
     int canvasHeight = viewHeight + 2 * (int) (shadowRadius + shadowSpread + Math.abs(dy));
 
-    Bitmap output = Bitmap.createBitmap(canvasWidth, canvasHeight, Bitmap.Config.ARGB_8888);
+    Bitmap output = Bitmap.createBitmap(canvasWidth, canvasHeight, Bitmap.Config.ARGB_4444);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+      WXLogUtils.d(TAG, "Allocation memory for box-shadow: " + (output.getAllocationByteCount() / 1024) + " KB");
+    }
     Canvas canvas = new Canvas(output);
 
-    float offsetX = shadowRadius + shadowSpread + Math.abs(dx);
-    float offsetY = shadowRadius + shadowSpread + Math.abs(dy);
-    RectF selfRect = new RectF(
-        offsetX,
-        offsetY,
-        (float) Math.floor(viewWidth + offsetX),
-        (float) Math.floor(viewHeight + offsetY));
-    Path contentPath = new Path();
-    contentPath.addRoundRect(selfRect, radii, Path.Direction.CCW);
-    // can not antialias
-    canvas.clipPath(contentPath, Region.Op.DIFFERENCE);
-
-    float shadowLeft, shadowTop;
-    if (shadowSpread == 0f) {
-      shadowLeft = shadowRadius;
-      shadowTop = shadowRadius;
-    } else {
-      shadowLeft = shadowRadius + dx - shadowSpread;
-      shadowTop = shadowRadius + dy - shadowSpread;
+    if (false && WXEnvironment.isApkDebugable()) {
+      // Using for debug
+      Paint strokePaint = new Paint();
+      strokePaint.setColor(Color.BLACK);
+      strokePaint.setStrokeWidth(2);
+      strokePaint.setStyle(Paint.Style.STROKE);
+      canvas.drawRect(canvas.getClipBounds(), strokePaint);
     }
-    RectF shadowRect = new RectF(
-        shadowLeft,
-        shadowTop,
-        canvasWidth - shadowRadius + shadowSpread,
-        canvasHeight - shadowRadius + shadowSpread);
 
-    shadowRect.top += Math.abs(dy);
-    shadowRect.bottom -= Math.abs(dy);
-    shadowRect.left += Math.abs(dx);
-    shadowRect.right -= Math.abs(dx);
+    RectF shadowRect = new RectF(
+        0f, 0f,
+        viewWidth + 2f * shadowSpread, viewHeight + 2f * shadowSpread
+    );
+
+    float shadowDx = shadowRadius;
+    float shadowDy = shadowRadius;
+    if (dx > 0) {
+      shadowDx = shadowDx + 2f * dx;
+    }
+    if (dy > 0) {
+      shadowDy = shadowDy + 2f * dy;
+    }
+    shadowRect.offset(shadowDx, shadowDy);
 
     Paint shadowPaint = new Paint();
     shadowPaint.setAntiAlias(true);
     shadowPaint.setColor(shadowColor);
     shadowPaint.setStyle(Paint.Style.FILL);
 
-    float shadowDx = 0f, shadowDy = 0f;
-    if (shadowSpread == 0f) {
-      shadowDx = dx;
-      shadowDy = dy;
+    if (shadowRadius > 0) {
+      shadowPaint.setMaskFilter(new BlurMaskFilter(shadowRadius, BlurMaskFilter.Blur.NORMAL));
     }
-    shadowPaint.setShadowLayer(shadowRadius, shadowDx, shadowDy, shadowColor);
 
     Path shadowPath = new Path();
     float[] shadowRadii = new float[8];
@@ -174,7 +182,7 @@ public class BoxShadowUtil {
     return output;
   }
 
-  private static void setNormalBoxShadow(View target, BoxShadowOptions options) {
+  private static void setNormalBoxShadow(View target, BoxShadowOptions options, float quality) {
     int h = target.getHeight();
     int w = target.getWidth();
 
@@ -184,27 +192,32 @@ public class BoxShadowUtil {
     }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-      Bitmap shadowBitmap = createShadowBitmap(w, h, options.radii, options.blur, options.spread, options.hShadow, options.vShadow, options.color);
+      options.viewWidth = w;
+      options.viewHeight = h;
 
-      int overflowX = (int) (options.blur + Math.abs(options.hShadow) + options.spread);
-      int overflowY = (int) (options.blur + Math.abs(options.vShadow) + options.spread);
+      BoxShadowOptions scaleOptions = options.scale(quality);
+      Bitmap shadowBitmap = createShadowBitmap(scaleOptions.viewWidth, scaleOptions.viewHeight, scaleOptions.radii, scaleOptions.blur, scaleOptions.spread, scaleOptions.hShadow, scaleOptions.vShadow, scaleOptions.color);
 
       //Drawable's bounds must match the bitmap size, otherwise the shadows will be scaled
-      OverflowBitmapDrawable shadowDrawable = new OverflowBitmapDrawable(target.getResources(), shadowBitmap, overflowX, overflowY);
-      shadowDrawable.setBounds(-overflowX, -overflowY, w + overflowX, h + overflowY);
+      OverflowBitmapDrawable shadowDrawable = new OverflowBitmapDrawable(target.getResources(), shadowBitmap, options);
 
       target.getOverlay().clear();
       target.getOverlay().add(shadowDrawable);
       //Relayout to ensure the shadows are fully drawn
-      target.getParent().requestLayout();
-      ((ViewGroup) target.getParent()).invalidate(shadowDrawable.getBounds());
+      ViewParent parent = target.getParent();
+      if (parent != null) {
+        parent.requestLayout();
+        if (parent instanceof ViewGroup) {
+          ((ViewGroup) parent).invalidate(shadowDrawable.getBounds());
+        }
+      }
     } else {
       // I have a dream that one day our minSdkVersion will equals or higher than 21
       Log.w("BoxShadowUtil", "Call setNormalBoxShadow() requires API level 18 or higher.");
     }
   }
 
-  private static void setInsetBoxShadow(View target, BoxShadowOptions options) {
+  private static void setInsetBoxShadow(View target, BoxShadowOptions options, float quality) {
     if (target == null || options == null) {
       WXLogUtils.w(TAG, "Illegal arguments");
       return;
@@ -285,13 +298,17 @@ public class BoxShadowUtil {
   }
 
   private static class OverflowBitmapDrawable extends BitmapDrawable {
-    int paddingX;
-    int paddingY;
+    private int paddingX;
+    private int paddingY;
+    private BoxShadowOptions options;
 
-    private OverflowBitmapDrawable(Resources resources, Bitmap bitmap, int paddingX, int paddingY) {
+    private OverflowBitmapDrawable(Resources resources, Bitmap bitmap, BoxShadowOptions options) {
       super(resources, bitmap);
-      this.paddingX = paddingX;
-      this.paddingY = paddingY;
+      this.paddingX = (int) (options.blur + Math.abs(options.hShadow) + options.spread);
+      this.paddingY = (int) (options.blur + Math.abs(options.vShadow) + options.spread);
+      this.options = options;
+
+      setBounds(-paddingX, -paddingY, options.viewWidth + paddingX, options.viewHeight + paddingY);
     }
 
     @Override
@@ -300,6 +317,13 @@ public class BoxShadowUtil {
       // Make the Canvas Rect bigger according to the padding.
       newRect.inset(-paddingX * 2, -paddingY * 2);
       canvas.clipRect(newRect, Region.Op.REPLACE);
+
+      Path contentPath = new Path();
+      RectF rectF = new RectF(0f, 0f, options.viewWidth, options.viewHeight);
+      contentPath.addRoundRect(rectF, options.radii, Path.Direction.CCW);
+      // can not antialias
+      canvas.clipPath(contentPath, Region.Op.DIFFERENCE);
+
       super.draw(canvas);
     }
   }
@@ -427,12 +451,12 @@ public class BoxShadowUtil {
     }
 
     @Override
-    public void setAlpha(int alpha) {
+    public void setAlpha(@IntRange(from = 0, to = 255) int alpha) {
 
     }
 
     @Override
-    public void setColorFilter(ColorFilter cf) {
+    public void setColorFilter(@Nullable ColorFilter colorFilter) {
 
     }
 
@@ -455,6 +479,8 @@ public class BoxShadowUtil {
     public boolean isInset = false;
 
     public boolean isClear = false;
+    public int viewWidth = 0;
+    public int viewHeight = 0;
 
     private BoxShadowOptions(int vp) {
       if (viewport != 0) {
@@ -485,6 +511,28 @@ public class BoxShadowUtil {
 
       optionParamParsers.add(blurParser);
       optionParamParsers.add(spreadParser);
+    }
+
+    public BoxShadowOptions scale(float scale) {
+      if (scale > 0f && scale <= 1f) {
+        BoxShadowOptions scaledOptions = new BoxShadowOptions(viewport);
+        scaledOptions.hShadow = hShadow * scale;
+        scaledOptions.vShadow = vShadow * scale;
+        scaledOptions.blur = blur * scale;
+        scaledOptions.spread = spread * scale;
+        for (int i = 0; i < radii.length ; i++) {
+          scaledOptions.radii[i] = radii[i] * scale;
+        }
+        scaledOptions.viewHeight = (int) (viewHeight * scale);
+        scaledOptions.viewWidth = (int) (viewWidth * scale);
+
+        scaledOptions.color = color;
+        scaledOptions.isInset = isInset;
+        scaledOptions.isClear = isClear;
+        WXLogUtils.d(TAG, "Scaled BoxShadowOptions: [" + scale + "] " + scaledOptions);
+        return scaledOptions;
+      }
+      return null;
     }
 
     @Override

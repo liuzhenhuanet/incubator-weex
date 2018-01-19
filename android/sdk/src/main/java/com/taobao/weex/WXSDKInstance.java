@@ -18,8 +18,6 @@
  */
 package com.taobao.weex;
 
-import static com.taobao.weex.http.WXHttpUtil.KEY_USER_AGENT;
-
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
@@ -38,6 +36,7 @@ import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ScrollView;
+
 import com.alibaba.fastjson.JSONObject;
 import com.taobao.weex.adapter.IDrawableLoader;
 import com.taobao.weex.adapter.IWXHttpAdapter;
@@ -80,13 +79,18 @@ import com.taobao.weex.utils.WXJsonUtils;
 import com.taobao.weex.utils.WXLogUtils;
 import com.taobao.weex.utils.WXReflectionUtils;
 import com.taobao.weex.utils.WXViewUtils;
+
 import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.taobao.weex.http.WXHttpUtil.KEY_USER_AGENT;
 
 /**
  * Each instance of WXSDKInstance represents an running weex instance.
@@ -127,13 +131,23 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
   private boolean mInvokeViewAppearOnResume = true; // 如果是内部WXSDKInstance，则应该设置为false，不然viewappear以及viewdisappear会调用两次
 
   /**
+   *for network tracker
+   */
+  public String mwxDims[] = new String [5];
+  public long measureTimes[] = new long [5];
+
+  public WeakReference<String> templateRef;
+  public Map<String,List<String>> responseHeaders = new HashMap<>();
+
+  /**
    * Render strategy.
    */
   private WXRenderStrategy mRenderStrategy = WXRenderStrategy.APPEND_ASYNC;
+
   /**
    * Render start time
    */
-  private long mRenderStartTime;
+  public long mRenderStartTime;
   /**
    * Refresh start time
    */
@@ -621,7 +635,6 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
     WXSDKEngine.reload();
 
     if (reloadThis) {
-      // 可以发送广播吗？
       if (mContext != null)  {
         Intent intent = new Intent();
         intent.setAction(IWXDebugProxy.ACTION_INSTANCE_RELOAD);
@@ -838,6 +851,8 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
         mWXPerformance.useScroller=1;
       }
       mWXPerformance.maxDeepViewLayer=getMaxDeepLayer();
+	  mWXPerformance.wxDims = mwxDims;
+	  mWXPerformance.measureTimes = measureTimes;
       if (mUserTrackAdapter != null) {
         mUserTrackAdapter.commit(mContext, null, IWXUserTrackAdapter.LOAD, mWXPerformance, getUserTrackParams());
       }
@@ -1003,9 +1018,6 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
           if ( mContext != null) {
             onViewAppear();
             View wxView= mRenderContainer;
-            if(WXEnvironment.isApkDebugable() && WXSDKManager.getInstance().getIWXDebugAdapter()!=null){
-              wxView = WXSDKManager.getInstance().getIWXDebugAdapter().wrapContainer(WXSDKInstance.this,wxView);
-            }
             if(mRenderListener != null) {
               mRenderListener.onViewCreated(WXSDKInstance.this, wxView);
             }
@@ -1049,9 +1061,8 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
       mWXPerformance.screenRenderTime =  time;
     }
     mWXPerformance.componentCount = WXComponent.mComponentNum;
-    if(WXEnvironment.isApkDebugable()) {
-      WXLogUtils.d(WXLogUtils.WEEX_PERF_TAG, "mComponentNum:" + WXComponent.mComponentNum);
-    }
+    WXLogUtils.d(WXLogUtils.WEEX_PERF_TAG, "mComponentNum:" + WXComponent.mComponentNum);
+
     WXComponent.mComponentNum = 0;
     if (mRenderListener != null && mContext != null) {
       runOnUiThread(new Runnable() {
@@ -1066,15 +1077,14 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
               performance.args=getBundleUrl();
               mUserTrackAdapter.commit(mContext,null,IWXUserTrackAdapter.JS_BRIDGE,performance,getUserTrackParams());
             }
-            if (WXEnvironment.isApkDebugable()) {
-              WXLogUtils.d(WXLogUtils.WEEX_PERF_TAG, mWXPerformance.toString());
-            }
+
+            WXLogUtils.d(WXLogUtils.WEEX_PERF_TAG, mWXPerformance.toString());
           }
         }
       });
     }
     if(!WXEnvironment.isApkDebugable()){
-      Log.e("weex_perf",mWXPerformance.getPerfData());
+      WXLogUtils.e("weex_perf",mWXPerformance.getPerfData());
     }
   }
 
@@ -1299,6 +1309,12 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
       mRenderListener = null;
       isDestroy = true;
       mStatisticsListener = null;
+      if(responseHeaders != null){
+          responseHeaders.clear();
+      }
+      if(templateRef != null){
+        templateRef = null;
+      }
     }
   }
 
@@ -1607,10 +1623,15 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
     }
 
     @Override
-    public void onHeadersReceived(int statusCode,Map<String,List<String>> headers) {
+    public void onHeadersReceived(int statusCode, Map<String,List<String>> headers) {
       if (this.instance != null
           && this.instance.getWXStatisticsListener() != null) {
         this.instance.getWXStatisticsListener().onHeadersReceived();
+      }
+      if(this.instance != null
+              && this.instance.responseHeaders != null
+              && headers != null){
+        this.instance.responseHeaders.putAll(headers);
       }
     }
 
@@ -1702,6 +1723,38 @@ public class WXSDKInstance implements IWXActivityStateListener,DomContext, View.
         onRenderError(WXRenderErrorCode.WX_NETWORK_ERROR, response.errorMsg);
       }
     }
+  }
+
+  /**
+   * return md5, and bytes length
+   * */
+  public String getTemplateInfo() {
+    String template = getTemplate();
+    if(template == null){
+      return " template md5 null";
+    }
+    if(TextUtils.isEmpty(template)){
+      return " template md5  length 0";
+    }
+    try {
+      byte[] bts = template.getBytes("UTF-8");
+      return " template md5 " + WXFileUtils.md5(bts) + " length " +   bts.length
+               + "response header " + JSONObject.toJSONString(responseHeaders);
+    } catch (UnsupportedEncodingException e) {
+      return "template md5 getBytes error";
+    }
+
+  }
+
+  public String getTemplate() {
+    if(templateRef == null){
+      return  null;
+    }
+    return templateRef.get();
+  }
+
+  public void setTemplate(String template) {
+    this.templateRef = new WeakReference<String>(template);
   }
 
   public interface NestedInstanceInterceptor {

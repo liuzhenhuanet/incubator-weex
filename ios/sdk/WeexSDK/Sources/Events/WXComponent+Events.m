@@ -154,6 +154,11 @@ if ([removeEventName isEqualToString:@#eventName]) {\
 
 - (void)_addEventOnMainThread:(NSString *)addEventName
 {
+    if (![self isViewLoaded]) {
+        //This action will be ignored While the view is loaded,
+        //then it will initEvent according to the records in _events
+        return;
+    }
     WX_ADD_EVENT(appear, addAppearEvent)
     WX_ADD_EVENT(disappear, addDisappearEvent)
     
@@ -172,6 +177,7 @@ if ([removeEventName isEqualToString:@#eventName]) {\
     WX_ADD_EVENT(touchmove, addTouchMoveEvent)
     WX_ADD_EVENT(touchend, addTouchEndEvent)
     WX_ADD_EVENT(touchcancel, addTouchCancelEvent)
+    WX_ADD_EVENT(accessibilityMagicTap, addAccessibilityMagicTapEvent)
     
     if(_isListenPseudoTouch) {
         self.touchGesture.listenPseudoTouch = YES;
@@ -200,7 +206,7 @@ if ([removeEventName isEqualToString:@#eventName]) {\
     WX_REMOVE_EVENT(touchmove, removeTouchMoveEvent)
     WX_REMOVE_EVENT(touchend, removeTouchEndEvent)
     WX_REMOVE_EVENT(touchcancel, removeTouchCancelEvent)
-    
+    WX_REMOVE_EVENT(accessibilityMagicTap, removeAccessibilityMagicTapEvent)
     if(_isListenPseudoTouch) {
         self.touchGesture.listenPseudoTouch = NO;
     }
@@ -257,6 +263,18 @@ if ([removeEventName isEqualToString:@#eventName]) {\
 {
     _touchGesture.listenPseudoTouch = NO;
     [self checkRemoveTouchGesture];
+}
+
+#pragma mark - Accessibility Event
+
+- (void)addAccessibilityMagicTapEvent
+{
+    _accessibilityMagicTapEvent = YES;
+}
+
+- (void)removeAccessibilityMagicTapEvent
+{
+    _accessibilityMagicTapEvent = NO;
 }
 
 #pragma mark - Click Event

@@ -807,6 +807,7 @@ public class WXSwipeLayout extends FrameLayout implements NestedScrollingParent,
         if (footerView != null && mPullLoadEnable && mCurrentAction == INVALID) {
             mTriggerActionManually = true;
             mCurrentAction = LOAD_MORE;
+            isConfirm = true;
             startLoadmore(0);
         }
     }

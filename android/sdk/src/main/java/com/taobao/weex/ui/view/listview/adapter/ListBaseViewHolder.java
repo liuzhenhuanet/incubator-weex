@@ -23,6 +23,7 @@ import android.view.View;
 
 import com.taobao.weex.ui.component.WXComponent;
 import com.taobao.weex.ui.component.WXHeader;
+import com.taobao.weex.ui.component.binding.Layouts;
 
 import java.lang.ref.WeakReference;
 
@@ -63,6 +64,7 @@ public class ListBaseViewHolder extends RecyclerView.ViewHolder {
   public void bindData(WXComponent component) {
     if (mComponent != null && mComponent.get() != null) {
       mComponent.get().bindData(component);
+      Layouts.setLayout(mComponent.get(), true);
       isRecycled = false;
     }
   }

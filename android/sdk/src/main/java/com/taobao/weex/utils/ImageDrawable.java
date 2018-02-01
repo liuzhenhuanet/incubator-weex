@@ -21,7 +21,10 @@ package com.taobao.weex.utils;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
+import android.graphics.Canvas;
 import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.PaintFlagsDrawFilter;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.BitmapDrawable;
@@ -32,6 +35,7 @@ import android.support.annotation.Nullable;
 import android.widget.ImageView;
 
 public class ImageDrawable extends PaintDrawable {
+  private final PaintFlagsDrawFilter PAINT_FLAGS_DRAW_FILTER = new PaintFlagsDrawFilter(0, Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
 
   public static Drawable createImageDrawable(@Nullable Drawable original,
                                              @NonNull ImageView.ScaleType scaleType,
@@ -137,4 +141,10 @@ public class ImageDrawable extends PaintDrawable {
     return bitmapWidth;
   }
 
+  @Override
+  public void draw(Canvas canvas) {
+    getPaint().setAntiAlias(true);
+    canvas.setDrawFilter(PAINT_FLAGS_DRAW_FILTER);
+    super.draw(canvas);
+  }
 }

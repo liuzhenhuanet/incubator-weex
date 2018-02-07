@@ -811,4 +811,23 @@ public class WXSwipeLayout extends FrameLayout implements NestedScrollingParent,
             startLoadmore(0);
         }
     }
+
+    public void finishPullLoadWithoutAnim() {
+        if (mCurrentAction == LOAD_MORE) {
+            resetFootViewWithoutAnim();
+        }
+    }
+
+    /**
+     * Reset loadmore state
+     */
+    private void resetFootViewWithoutAnim() {
+        footerView.stopAnimation();
+        footerView.setStartEndTrim(0.5f, 1.25f);
+        LayoutParams lp = (LayoutParams) footerView.getLayoutParams();
+        lp.height = 0;
+        footerView.setLayoutParams(lp);
+        moveTargetView(-lp.height);
+        resetLoadmoreState();
+    }
 }
